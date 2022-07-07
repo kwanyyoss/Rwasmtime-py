@@ -1,13 +1,37 @@
 from ctypes import *
-from wasmtime import WasmtimeError
-from . import _ffi as ffi
+from ._error import WasmtimeError
+from wasmtime import _ffi as ffi
 from ._config import setter_property
 from typing import List, Iterable
 
+from bases import Object, __main__
+makeapi = __main__.makeapi
+del __main__
 
-class WasiConfig:
+class WasiConfig(Object):
+    __slots__ = ('__locked__', '__proxydict__')
     def __init__(self) -> None:
-        self._ptr = ffi.wasi_config_new()
+        class priv():
+            def __init__(self, p):
+                self._ptr = p
+            def __del__(self) -> None:
+                if hasattr(self, '_ptr'):
+                    ffi.wasi_config_delete(self._ptr)
+        _ptr = priv(ffi.wasi_config_new())
+        def _moveout(pw=None):
+            if pw != to_char_array:
+                raise RuntimeError(f"{__class__}._moveout() - private API " +
+                                   'denied')
+            tmp = _ptr._ptr
+            del _ptr._ptr
+            return tmp
+        super().__init__()
+        self._get = lambda : _ptr._ptr
+        self._moveout = _moveout
+        self.lockdown(makeapi)
+    @property
+    def _ptr(self):
+        return self._get()
 
     @setter_property
     def argv(self, argv: List[str]) -> None:
@@ -128,10 +152,7 @@ class WasiConfig:
         path_ptr = c_char_p(path.encode('utf-8'))
         guest_path_ptr = c_char_p(guest_path.encode('utf-8'))
         ffi.wasi_config_preopen_dir(self._ptr, path_ptr, guest_path_ptr)
-
-    def __del__(self) -> None:
-        if hasattr(self, '_ptr'):
-            ffi.wasi_config_delete(self._ptr)
+WasiConfig.lockclass()
 
 
 def to_char_array(strings: List[str]) -> "pointer[pointer[c_char]]":

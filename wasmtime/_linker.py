@@ -1,7 +1,11 @@
 from ctypes import *
-from wasmtime import Instance, Engine, FuncType
-from wasmtime import Module, WasmtimeError, Func
-from . import _ffi as ffi
+from ._instance import Instance
+from ._engine import Engine
+from ._types import FuncType
+from ._module import Module
+from ._error import WasmtimeError
+from ._func import Func
+from wasmtime import _ffi as ffi
 from ._extern import get_extern_ptr, wrap_extern
 from ._config import setter_property
 from ._exportable import AsExtern
@@ -9,17 +13,23 @@ from ._store import Storelike
 from ._func import enter_wasm, trampoline, FUNCTIONS, finalize
 from typing import Callable
 
+from bases import Object, __main__
+makeapi = __main__.makeapi
+del __main__
 
-class Linker:
+class Linker(Object):
     engine: Engine
 
+    __slots__ = ('__locked__', '__proxydict__')
     def __init__(self, engine: Engine):
         """
         Creates a new linker ready to instantiate modules within the store
         provided.
         """
+        super().__init__()
         self._ptr = ffi.wasmtime_linker_new(engine._ptr)
         self.engine = engine
+        self.lockdown(makeapi)
 
     @setter_property
     def allow_shadowing(self, allow: bool) -> None:
@@ -206,3 +216,4 @@ class Linker:
     def __del__(self) -> None:
         if hasattr(self, '_ptr'):
             ffi.wasmtime_linker_delete(self._ptr)
+Linker.lockclass()

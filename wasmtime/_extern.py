@@ -1,11 +1,19 @@
-from . import _ffi as ffi
+from wasmtime import _ffi as ffi
 from ctypes import *
 from ._exportable import AsExtern
-from wasmtime import WasmtimeError
+from ._error import WasmtimeError
 
+from bases import Object, __main__
+makeapi = __main__.makeapi
+del __main__
 
 def wrap_extern(ptr: ffi.wasmtime_extern_t) -> AsExtern:
-    from wasmtime import Func, Table, Global, Memory, Module, Instance
+    from ._func import Func
+    from ._table import Table
+    from ._globals import Global
+    from ._memory import Memory
+    from ._module import Module
+    from ._instance import Instance
 
     if ptr.kind == ffi.WASMTIME_EXTERN_FUNC.value:
         return Func._from_raw(ptr.of.func)
@@ -23,7 +31,12 @@ def wrap_extern(ptr: ffi.wasmtime_extern_t) -> AsExtern:
 
 
 def get_extern_ptr(item: AsExtern) -> ffi.wasmtime_extern_t:
-    from wasmtime import Func, Table, Global, Memory, Module, Instance
+    from ._func import Func
+    from ._table import Table
+    from ._globals import Global
+    from ._memory import Memory
+    from ._module import Module
+    from ._instance import Instance
 
     if isinstance(item, Func):
         return item._as_extern()
@@ -41,9 +54,12 @@ def get_extern_ptr(item: AsExtern) -> ffi.wasmtime_extern_t:
         raise TypeError("expected a Func, Global, Memory, Table, Module, or Instance")
 
 
-class Extern:
+class Extern(Object):
+    __slots__ = ('__locked__', '__proxydict__')
     def __init__(self, ptr: "pointer[ffi.wasm_extern_t]"):
+        super().__init__()
         self.ptr = ptr
+        self.lockdown(makeapi)
 
     def __del__(self) -> None:
         ffi.wasm_extern_delete(self.ptr)

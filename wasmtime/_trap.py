@@ -1,8 +1,11 @@
-from . import _ffi as ffi
+from wasmtime import _ffi as ffi
 from enum import Enum
 from ctypes import byref, POINTER, pointer, c_int
 from typing import Optional, Any, List
 
+from bases import RException as Exception, Object, __main__
+makeapi = __main__.makeapi
+del __main__
 
 class TrapCode(Enum):
     # The current stack space was exhausted.
@@ -97,6 +100,7 @@ class Trap(Exception):
     def __del__(self) -> None:
         if hasattr(self, '_ptr'):
             ffi.wasm_trap_delete(self._ptr)
+Trap.lock()
 
 
 class ExitTrap(Trap):
@@ -114,20 +118,23 @@ class ExitTrap(Trap):
     """
     code: int
     pass
+ExitTrap.lock()
 
 
-class Frame:
+class Frame(Object):
     _ptr: "pointer[ffi.wasm_frame_t]"
     _owner: Optional[Any]
 
+    __slots__ = ('__locked__', '__proxydict__')
     @classmethod
     def _from_ptr(cls, ptr: "pointer[ffi.wasm_frame_t]", owner: Optional[Any]) -> "Frame":
         ty: "Frame" = cls.__new__(cls)
         if not isinstance(ptr, POINTER(ffi.wasm_frame_t)):
             raise TypeError("wrong pointer type")
+        super(cls, ty).__init__()
         ty._ptr = ptr
         ty._owner = owner
-        return ty
+        return ty.lockdown(makeapi)
 
     @property
     def func_index(self) -> int:
@@ -186,11 +193,16 @@ class Frame:
     def __del__(self) -> None:
         if self._owner is None:
             ffi.wasm_frame_delete(self._ptr)
+Frame.lockclass()
 
 
-class FrameList:
+class FrameList(Object):
+    __slots__ = ('__locked__', '__proxydict__')
     def __init__(self) -> None:
+        super().__init__()
         self.vec = ffi.wasm_frame_vec_t(0, None)
+        self.lockdown(makeapi)
 
     def __del__(self) -> None:
         ffi.wasm_frame_vec_delete(byref(self.vec))
+FrameList.lockclass()

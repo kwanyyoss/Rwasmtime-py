@@ -1,7 +1,11 @@
-from . import _ffi as ffi
+from wasmtime import _ffi as ffi
 from ctypes import *
-from wasmtime import WasmtimeError
+from ._error import WasmtimeError
 import typing
+
+from bases import Object, __main__
+makeapi = __main__.makeapi
+del __main__
 
 
 def setter_property(fset: typing.Callable) -> property:
@@ -12,7 +16,7 @@ def setter_property(fset: typing.Callable) -> property:
     return prop
 
 
-class Config:
+class Config(Object):
     """
     Global configuration, used to create an `Engine`.
 
@@ -20,8 +24,30 @@ class Config:
     code is compiled or generated.
     """
 
+
+    __slots__ = ('__locked__', '__proxydict__')
     def __init__(self) -> None:
-        self._ptr = ffi.wasm_config_new()
+        class priv():
+            def __init__(self, p):
+                self._ptr = p
+            def __del__(self) -> None:
+                if hasattr(self, '_ptr'):
+                    ffi.wasm_config_delete(self._ptr)
+        _ptr = priv(ffi.wasm_config_new())
+        def _moveout(pw=None):
+            if pw != setter_property:
+                raise RuntimeError(f"{__class__}._moveout() - private API " +
+                                   'denied')
+            tmp = _ptr._ptr
+            del _ptr._ptr
+            return tmp
+        super().__init__()
+        self._get = lambda : _ptr._ptr
+        self._moveout = _moveout
+        self.lockdown(makeapi)
+    @property
+    def _ptr(self):
+        return self._get()
 
     @setter_property
     def debug_info(self, enable: bool) -> None:
@@ -228,7 +254,4 @@ class Config:
         if not isinstance(instances, bool):
             raise TypeError('expected an bool')
         ffi.wasmtime_config_consume_fuel_set(self._ptr, instances)
-
-    def __del__(self) -> None:
-        if hasattr(self, '_ptr'):
-            ffi.wasm_config_delete(self._ptr)
+Config.lockclass()

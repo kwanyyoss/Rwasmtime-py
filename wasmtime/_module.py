@@ -1,22 +1,30 @@
-from . import _ffi as ffi
+from wasmtime import _ffi as ffi
 from ctypes import *
-from wasmtime import Engine, wat2wasm, ImportType, ExportType, WasmtimeError, ModuleType
+from ._error import WasmtimeError
+from ._engine import Engine
+from ._wat2wasm import wat2wasm
+from ._types import ImportType, ExportType, ModuleType
 import typing
 
+from bases import Object, __main__
+makeapi = __main__.makeapi
+del __main__
 
-class Module:
-    @classmethod
-    def from_file(cls, engine: Engine, path: str) -> "Module":
-        """
-        Compiles and creates a new `Module` by reading the file at `path` and
-        then delegating to the `Module` constructor.
-        """
-
-        with open(path, "rb") as f:
-            contents = f.read()
-        return cls(engine, contents)
+class Module(Object):
+    __slots__ = ('__locked__', '__proxydict__')
+#    @classmethod
+#    def from_file(cls, engine: Engine, path: str) -> "Module":
+#        """
+#        Compiles and creates a new `Module` by reading the file at `path` and
+#        then delegating to the `Module` constructor.
+#        """
+#
+#        with open(path, "rb") as f:
+#            contents = f.read()
+#        return cls(engine, contents)
 
     def __init__(self, engine: Engine, wasm: typing.Union[str, bytes]):
+        super().__init__()
         if not isinstance(engine, Engine):
             raise TypeError("expected an Engine")
 
@@ -40,14 +48,16 @@ class Module:
         if error:
             raise WasmtimeError._from_ptr(error)
         self._ptr = ptr
+        self.lockdown(makeapi)
 
     @classmethod
     def _from_ptr(cls, ptr: "pointer[ffi.wasmtime_module_t]") -> "Module":
         ty: "Module" = cls.__new__(cls)
         if not isinstance(ptr, POINTER(ffi.wasmtime_module_t)):
             raise TypeError("wrong pointer type")
+        super(cls, ty).__init__()
         ty._ptr = ptr
-        return ty
+        return ty.lockdown(makeapi)
 
     @classmethod
     def deserialize(cls, engine: Engine, encoded: typing.Union[bytes, bytearray]) -> 'Module':
@@ -75,8 +85,9 @@ class Module:
         if error:
             raise WasmtimeError._from_ptr(error)
         ret: "Module" = cls.__new__(cls)
+        super(cls, ret).__init__()
         ret._ptr = ptr
-        return ret
+        return ret.lockdown(makeapi)
 
     @classmethod
     def deserialize_file(cls, engine: Engine, path: str) -> 'Module':
@@ -96,8 +107,9 @@ class Module:
         if error:
             raise WasmtimeError._from_ptr(error)
         ret: "Module" = cls.__new__(cls)
+        super(cls, ret).__init__()
         ret._ptr = ptr
-        return ret
+        return ret.lockdown(makeapi)
 
     @classmethod
     def validate(cls, engine: Engine, wasm: typing.Union[bytes, bytearray]) -> None:
@@ -166,3 +178,4 @@ class Module:
     def __del__(self) -> None:
         if hasattr(self, '_ptr'):
             ffi.wasmtime_module_delete(self._ptr)
+Module.lockclass()

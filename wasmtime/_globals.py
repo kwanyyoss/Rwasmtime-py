@@ -1,10 +1,13 @@
-from . import _ffi as ffi
+from wasmtime import _ffi as ffi
 from ctypes import *
-from wasmtime import GlobalType, Val, WasmtimeError, IntoVal
+from ._error import WasmtimeError
+from ._types import GlobalType
+from ._value import Val, IntoVal
 from ._store import Storelike
 
+from bases import Final
 
-class Global:
+class Global(Final):
     _global: ffi.wasmtime_global_t
 
     def __init__(self, store: Storelike, ty: GlobalType, val: IntoVal):

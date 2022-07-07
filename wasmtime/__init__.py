@@ -13,6 +13,17 @@ free to consult that documentation as well. While not exactly the same the two
 libraries are intended to be quite similar.
 """
 
+#==============================================================================
+# This is a transplant of the "wasmtime-py" interfaces on top of the sandboxing
+# framework.  The "wasmtime-py" interfaces are intended for a module's internal
+# use.  Application code must secure any object involving WASM when exposing it 
+# to another module.  As such, the "wasmtime-py" interfaces are only to be
+# "sandboxed" in the sense that one module's use of them may not interfere or
+# be disrupted by another module.  For example, all interface classes are to be
+# frozen, so that their methods and attributes remain constant as originally
+# defined.
+#==============================================================================
+
 from ._error import WasmtimeError
 from ._config import Config
 from ._engine import Engine

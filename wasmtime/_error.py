@@ -1,5 +1,6 @@
 from ctypes import byref, POINTER, pointer
 
+from bases import RException as Exception
 
 class WasmtimeError(Exception):
     def __init__(self, message: str):
@@ -7,7 +8,7 @@ class WasmtimeError(Exception):
 
     @classmethod
     def _from_ptr(cls, ptr: pointer) -> 'WasmtimeError':
-        from . import _ffi as ffi
+        from wasmtime import _ffi as ffi
         if not isinstance(ptr, POINTER(ffi.wasmtime_error_t)):
             raise TypeError("wrong pointer type")
         message_vec = ffi.wasm_byte_vec_t()
@@ -19,3 +20,5 @@ class WasmtimeError(Exception):
 
     def __str__(self) -> str:
         return self.message
+WasmtimeError.lock()
+

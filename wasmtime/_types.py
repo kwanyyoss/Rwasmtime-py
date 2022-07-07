@@ -1,13 +1,17 @@
-from . import _ffi as ffi
-from wasmtime import WasmtimeError
+from wasmtime import _ffi as ffi
+from ._error import WasmtimeError
 from ctypes import byref, POINTER, pointer
 from typing import Union, List, Optional, Any
 
+from bases import Object, __main__
+makeapi = __main__.makeapi
+del __main__
 
-class ValType:
+class ValType(Object):
     _ptr: "pointer[ffi.wasm_valtype_t]"
     _owner: Optional[Any]
 
+    __slots__ = ('__locked__', '__proxydict__')
     @classmethod
     def i32(cls) -> "ValType":
         ptr = ffi.wasm_valtype_new(ffi.WASM_I32)
@@ -46,9 +50,10 @@ class ValType:
         ty: "ValType" = cls.__new__(cls)
         if not isinstance(ptr, POINTER(ffi.wasm_valtype_t)):
             raise TypeError("wrong pointer type")
+        super(cls, ty).__init__()
         ty._ptr = ptr
         ty._owner = owner
-        return ty
+        return ty.lockdown(makeapi)
 
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, ValType):
@@ -96,7 +101,7 @@ class ValType:
         for i in range(0, items.contents.size):
             types.append(ValType._from_ptr(items.contents.data[i], owner))
         return types
-
+ValType.lockclass()
 
 def take_owned_valtype(ty: ValType) -> "pointer[ffi.wasm_valtype_t]":
     if not isinstance(ty, ValType):
@@ -109,8 +114,10 @@ def take_owned_valtype(ty: ValType) -> "pointer[ffi.wasm_valtype_t]":
     return ffi.wasm_valtype_new(ffi.wasm_valtype_kind(ty._ptr))
 
 
-class FuncType:
+class FuncType(Object):
+    __slots__ = ('__locked__', '__proxydict__')
     def __init__(self, params: List[ValType], results: List[ValType]):
+        super().__init__()
         for param in params:
             if not isinstance(param, ValType):
                 raise TypeError("expected ValType")
@@ -134,15 +141,17 @@ class FuncType:
             raise WasmtimeError("failed to allocate FuncType")
         self._ptr = ptr
         self._owner = None
+        self.lockdown(makeapi)
 
     @classmethod
     def _from_ptr(cls, ptr: "pointer[ffi.wasm_functype_t]", owner: Optional[Any]) -> "FuncType":
         ty: "FuncType" = cls.__new__(cls)
         if not isinstance(ptr, POINTER(ffi.wasm_functype_t)):
             raise TypeError("wrong pointer type")
+        super(cls, ty).__init__()
         ty._ptr = ptr
         ty._owner = owner
-        return ty
+        return ty.lockdown(makeapi)
 
     @property
     def params(self) -> List["ValType"]:
@@ -168,10 +177,13 @@ class FuncType:
     def __del__(self) -> None:
         if hasattr(self, '_owner') and self._owner is None:
             ffi.wasm_functype_delete(self._ptr)
+FuncType.lockclass()
 
 
-class GlobalType:
+class GlobalType(Object):
+    __slots__ = ('__locked__', '__proxydict__')
     def __init__(self, valtype: ValType, mutable: bool):
+        super().__init__()
         if mutable:
             mutability = ffi.WASM_VAR
         else:
@@ -182,15 +194,17 @@ class GlobalType:
             raise WasmtimeError("failed to allocate GlobalType")
         self._ptr = ptr
         self._owner = None
+        self.lockdown(makeapi)
 
     @classmethod
     def _from_ptr(cls, ptr: "pointer[ffi.wasm_globaltype_t]", owner: Optional[Any]) -> "GlobalType":
         ty: "GlobalType" = cls.__new__(cls)
         if not isinstance(ptr, POINTER(ffi.wasm_globaltype_t)):
             raise TypeError("wrong pointer type")
+        super(cls, ty).__init__()
         ty._ptr = ptr
         ty._owner = owner
-        return ty
+        return ty.lockdown(makeapi)
 
     @property
     def content(self) -> ValType:
@@ -215,10 +229,13 @@ class GlobalType:
     def __del__(self) -> None:
         if hasattr(self, '_owner') and self._owner is None:
             ffi.wasm_globaltype_delete(self._ptr)
+GlobalType.lockclass()
 
 
-class Limits:
+class Limits(Object):
+    __slots__ = ('__locked__', '__proxydict__')
     def __init__(self, min: int, max: Optional[int]):
+        super().__init__()
         self.min = min
         self.max = max
 
@@ -238,12 +255,15 @@ class Limits:
         min = val.contents.min
         max = val.contents.max
         if max == 0xffffffff:
-            return Limits(min, None)
-        return Limits(min, max)
+            return Limits(min, None).lockdown(makeapi)
+        return Limits(min, max).lockdown(makeapi)
+Limits.lockclass()
 
 
-class TableType:
+class TableType(Object):
+    __slots__ = ('__locked__', '__proxydict__')
     def __init__(self, valtype: ValType, limits: Limits):
+        super().__init__()
         if not isinstance(limits, Limits):
             raise TypeError("expected Limits")
         type_ptr = take_owned_valtype(valtype)
@@ -252,15 +272,17 @@ class TableType:
             raise WasmtimeError("failed to allocate TableType")
         self._ptr = ptr
         self._owner = None
+        self.lockdown(makeapi)
 
     @classmethod
     def _from_ptr(cls, ptr: 'pointer[ffi.wasm_tabletype_t]', owner: Optional[Any]) -> "TableType":
         ty: "TableType" = cls.__new__(cls)
         if not isinstance(ptr, POINTER(ffi.wasm_tabletype_t)):
             raise TypeError("wrong pointer type")
+        super(cls, ty).__init__()
         ty._ptr = ptr
         ty._owner = owner
-        return ty
+        return ty.lockdown(makeapi)
 
     @property
     def element(self) -> ValType:
@@ -284,10 +306,13 @@ class TableType:
     def __del__(self) -> None:
         if hasattr(self, '_owner') and self._owner is None:
             ffi.wasm_tabletype_delete(self._ptr)
+TableType.lockclass()
 
 
-class MemoryType:
+class MemoryType(Object):
+    __slots__ = ('__locked__', '__proxydict__')
     def __init__(self, limits: Limits, is_64: bool = False):
+        super().__init__()
         if not isinstance(limits, Limits):
             raise TypeError("expected Limits")
         if is_64:
@@ -306,15 +331,17 @@ class MemoryType:
             raise WasmtimeError("failed to allocate MemoryType")
         self._ptr = ptr
         self._owner = None
+        self.lockdown(makeapi)
 
     @classmethod
     def _from_ptr(cls, ptr: "pointer[ffi.wasm_memorytype_t]", owner: Optional[Any]) -> "MemoryType":
         ty: "MemoryType" = cls.__new__(cls)
         if not isinstance(ptr, POINTER(ffi.wasm_memorytype_t)):
             raise TypeError("wrong pointer type")
+        super(cls, ty).__init__()
         ty._ptr = ptr
         ty._owner = owner
-        return ty
+        return ty.lockdowm(makeapi)
 
     @property
     def limits(self) -> Limits:
@@ -324,7 +351,8 @@ class MemoryType:
         minimum = ffi.wasmtime_memorytype_minimum(self._ptr)
         maximum = ffi.c_uint64(0)
         has_max = ffi.wasmtime_memorytype_maximum(self._ptr, byref(maximum))
-        return Limits(minimum, maximum.value if has_max else None)
+        return Limits(minimum,
+                      maximum.value if has_max else None).lockdown(makeapi)
 
     @property
     def is_64(self) -> bool:
@@ -339,12 +367,14 @@ class MemoryType:
     def __del__(self) -> None:
         if hasattr(self, '_owner') and self._owner is None:
             ffi.wasm_memorytype_delete(self._ptr)
+MemoryType.lockclass()
 
 
-class ModuleType:
+class ModuleType(Object):
     _ptr: "pointer[ffi.wasmtime_moduletype_t]"
     _owner: Optional[Any]
 
+    __slots__ = ('__locked__', '__proxydict__')
     def __init__(self) -> None:
         raise WasmtimeError("cannot create a `ModuleType` currently")
 
@@ -353,9 +383,10 @@ class ModuleType:
         ty: "ModuleType" = cls.__new__(cls)
         if not isinstance(ptr, POINTER(ffi.wasmtime_moduletype_t)):
             raise TypeError("wrong pointer type")
+        super(cls, ty).__init__()
         ty._ptr = ptr
         ty._owner = owner
-        return ty
+        return ty.lockdown(makeapi)
 
     @property
     def exports(self) -> List['ExportType']:
@@ -389,12 +420,14 @@ class ModuleType:
     def __del__(self) -> None:
         if hasattr(self, '_owner') and self._owner is None:
             ffi.wasmtime_moduletype_delete(self._ptr)
+ModuleType.lockclass()
 
 
-class InstanceType:
+class InstanceType(Object):
     _ptr: "pointer[ffi.wasmtime_instancetype_t]"
     _owner: Optional[Any]
 
+    __slots__ = ('__locked__', '__proxydict__')
     def __init__(self) -> None:
         raise WasmtimeError("cannot create an `InstanceType` currently")
 
@@ -403,9 +436,10 @@ class InstanceType:
         ty: "InstanceType" = cls.__new__(cls)
         if not isinstance(ptr, POINTER(ffi.wasmtime_instancetype_t)):
             raise TypeError("wrong pointer type")
+        super(cls, ty).__init__()
         ty._ptr = ptr
         ty._owner = owner
-        return ty
+        return ty.lockdown(makeapi)
 
     @property
     def exports(self) -> List['ExportType']:
@@ -426,6 +460,7 @@ class InstanceType:
     def __del__(self) -> None:
         if hasattr(self, '_owner') and self._owner is None:
             ffi.wasmtime_instancetype_delete(self._ptr)
+InstanceType.lockclass()
 
 
 def wrap_externtype(ptr: "pointer[ffi.wasm_externtype_t]", owner: Optional[Any]) -> "AsExternType":
@@ -452,18 +487,20 @@ def wrap_externtype(ptr: "pointer[ffi.wasm_externtype_t]", owner: Optional[Any])
     raise WasmtimeError("unknown extern type")
 
 
-class ImportType:
+class ImportType(Object):
     _ptr: "pointer[ffi.wasm_importtype_t]"
     _owner: Optional[Any]
 
+    __slots__ = ('__locked__', '__proxydict__')
     @classmethod
     def _from_ptr(cls, ptr: "pointer[ffi.wasm_importtype_t]", owner: Optional[Any]) -> "ImportType":
         ty: "ImportType" = cls.__new__(cls)
         if not isinstance(ptr, POINTER(ffi.wasm_importtype_t)):
             raise TypeError("wrong pointer type")
+        super(cls, ty).__init__()
         ty._ptr = ptr
         ty._owner = owner
-        return ty
+        return ty.lockdown(makeapi)
 
     @property
     def module(self) -> str:
@@ -497,20 +534,23 @@ class ImportType:
     def __del__(self) -> None:
         if self._owner is None:
             ffi.wasm_importtype_delete(self._ptr)
+ImportType.lockclass()
 
 
-class ExportType:
+class ExportType(Object):
     _ptr: "pointer[ffi.wasm_exporttype_t]"
     _owner: Optional[Any]
 
+    __slots__ = ('__locked__', '__proxydict__')
     @classmethod
     def _from_ptr(cls, ptr: 'pointer[ffi.wasm_exporttype_t]', owner: Optional[Any]) -> "ExportType":
         ty: "ExportType" = cls.__new__(cls)
         if not isinstance(ptr, POINTER(ffi.wasm_exporttype_t)):
             raise TypeError("wrong pointer type")
+        super(cls, ty).__init__()
         ty._ptr = ptr
         ty._owner = owner
-        return ty
+        return ty.lockdown(makeapi)
 
     @property
     def name(self) -> str:
@@ -530,19 +570,25 @@ class ExportType:
     def __del__(self) -> None:
         if self._owner is None:
             ffi.wasm_exporttype_delete(self._ptr)
+ExportType.lockclass()
 
 
-class ImportTypeList:
+class ImportTypeList(Object):
+    __slots__ = ('__locked__', '__proxydict__')
     def __init__(self) -> None:
         self.vec = ffi.wasm_importtype_vec_t(0, None)
+        self.lockdown(makeapi)
 
     def __del__(self) -> None:
         ffi.wasm_importtype_vec_delete(byref(self.vec))
+ImportTypeList.lockclass()
 
 
-class ExportTypeList:
+class ExportTypeList(Object):
+    __slots__ = ('__locked__', '__proxydict__')
     def __init__(self) -> None:
         self.vec = ffi.wasm_exporttype_vec_t(0, None)
+        self.lockdown(makeapi)
 
     def __del__(self) -> None:
         ffi.wasm_exporttype_vec_delete(byref(self.vec))

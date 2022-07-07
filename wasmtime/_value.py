@@ -1,41 +1,55 @@
+from wasmtime._ffi import *
+# "wasmtime._ffi" has the original "WasmtimeError" - overwrite
 from ._error import WasmtimeError
-from ._ffi import *
 from ._types import ValType
 import ctypes
 import typing
 
+from bases import Object, __main__
+makeapi = __main__.makeapi
+del __main__
+
+Val__id_to_ref_count = []
+Val__id_to_extern    = []
 
 @ctypes.CFUNCTYPE(None, c_void_p)
 def _externref_finalizer(extern_id: int) -> None:
-    Val._id_to_ref_count[extern_id] -= 1
-    if Val._id_to_ref_count[extern_id] == 0:
-        del Val._id_to_ref_count[extern_id]
-        del Val._id_to_extern[extern_id]
+    global Val__id_to_ref_count
+    global Val__id_to_extern
+    Val__id_to_ref_count[extern_id] -= 1
+    if Val__id_to_ref_count[extern_id] == 0:
+        del Val__id_to_ref_count[extern_id]
+        del Val__id_to_extern[extern_id]
 
 
 def _intern(obj: typing.Any) -> c_void_p:
+    global Val__id_to_ref_count
+    global Val__id_to_extern
     extern_id = id(obj)
-    Val._id_to_ref_count.setdefault(extern_id, 0)
-    Val._id_to_ref_count[extern_id] += 1
-    Val._id_to_extern[extern_id] = obj
+    Val__id_to_ref_count.setdefault(extern_id, 0)
+    Val__id_to_ref_count[extern_id] += 1
+    Val__id_to_extern[extern_id] = obj
     return ctypes.c_void_p(extern_id)
 
 
 def _unintern(val: int) -> typing.Any:
-    return Val._id_to_extern.get(val)
+    global Val__id_to_extern
+    return Val__id_to_extern.get(val)
 
 
-class Val:
+class Val(Object):
     # We can't let the extern values we wrap `externref`s around be GC'd, so we
     # pin them in `_id_to_extern`. Additionally, we might make multiple
     # `externref`s to the same extern value, so we count how many references
     # we've created in `_id_to_ref_count`, and only remove a value's entry from
     # `_id_to_extern` once the ref count is zero.
-    _id_to_extern: typing.Dict[int, typing.Any] = {}
-    _id_to_ref_count: typing.Dict[int, int] = {}
+    # moved to module global to hide from API users
+    #_id_to_extern: typing.Dict[int, typing.Any] = {}
+    #_id_to_ref_count: typing.Dict[int, int] = {}
 
     _raw: typing.Optional[wasmtime_val_t]
 
+    __slots__ = ('__locked__', '__proxydict__')
     @classmethod
     def i32(cls, val: int) -> "Val":
         """
@@ -107,16 +121,34 @@ class Val:
         raise WasmtimeError("Invalid reference type for `ref_null`: %s" % ty)
 
     def __init__(self, raw: wasmtime_val_t):
-        self._raw = raw
+        class priv():
+            def __init__(self, r):
+                self._raw = r
+            def __del__(self) -> None:
+                if hasattr(self, "_raw") and self._raw is not None:
+                    wasmtime_val_delete(ctypes.byref(self._raw))
+        _raw = priv(raw)
+        def _moveout(pw=None) -> wasmtime_val_t:
+            nonlocal _raw
+
+            if (pw != _externref_finalizer):
+                raise RuntimeError(f"{__class__}._moveout() - private API " +
+                                   'denied')
+            tmp = self._unwrap_raw()
+            _raw._raw = None
+            return tmp
+        super().__init__()
+        self._into_raw = _moveout
+        self._get = lambda : _raw._raw
+        self.lockdown(makeapi)
+    @property
+    def _raw(self):
+        return self._get()
 
     def __eq__(self, rhs: typing.Any) -> typing.Any:
         if isinstance(rhs, Val):
             return self._unwrap_raw().kind == rhs._unwrap_raw().kind and self.value == rhs.value
         return self.value == rhs
-
-    def __del__(self) -> None:
-        if hasattr(self, "_raw") and self._raw is not None:
-            wasmtime_val_delete(ctypes.byref(self._raw))
 
     def _clone(self) -> "Val":
         raw = self._unwrap_raw()
@@ -152,11 +184,6 @@ class Val:
         elif ty == ValType.externref():
             return Val.externref(val)
         raise TypeError("don't know how to convert %r to %s" % (val, ty))
-
-    def _into_raw(self) -> wasmtime_val_t:
-        raw = self._unwrap_raw()
-        self._raw = None
-        return raw
 
     def _unwrap_raw(self) -> wasmtime_val_t:
         if isinstance(self._raw, wasmtime_val_t):
@@ -284,6 +311,7 @@ class Val:
             return ValType.funcref()
         else:
             raise Exception("unknown kind %d" % kind.value)
+Val.lockclass()
 
 
 IntoVal = typing.Union[
@@ -310,4 +338,4 @@ IntoVal = typing.Union[
 # This needs to be imported so that mypy understands `wasmtime.Func` in typings,
 # but it also has to come after `Val`'s definition to deal with circular module
 # dependency issues.
-import wasmtime  # noqa: E402
+import __init__ as wasmtime # noqa: E402

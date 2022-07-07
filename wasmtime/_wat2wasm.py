@@ -1,6 +1,6 @@
-from . import _ffi as ffi
+from wasmtime import _ffi as ffi
 from ctypes import *
-from wasmtime import WasmtimeError
+from ._error import WasmtimeError
 import typing
 
 

@@ -1,14 +1,17 @@
-from . import _ffi as ffi
+from wasmtime import _ffi as ffi
 from ctypes import POINTER, byref
-from wasmtime import Module, WasmtimeError, Store, InstanceType
+from ._error import WasmtimeError
+from ._module import Module
+from ._types import InstanceType
 from ._extern import wrap_extern, get_extern_ptr
 from ._exportable import AsExtern
 from typing import Sequence, Union, Optional, Mapping, Iterable
-from ._store import Storelike
+from ._store import Store, Storelike
 from ._func import enter_wasm
 
+from bases import Final
 
-class Instance:
+class Instance(Final):
     _instance: ffi.wasmtime_instance_t
     _exports: Optional["InstanceExports"]
 
@@ -75,7 +78,7 @@ class Instance:
         return ffi.wasmtime_extern_t(ffi.WASMTIME_EXTERN_INSTANCE, union)
 
 
-class InstanceExports:
+class InstanceExports(Final):
     _extern_list: Sequence[AsExtern]
     _extern_map: Mapping[str, AsExtern]
 

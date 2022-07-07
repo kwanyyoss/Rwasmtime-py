@@ -1,19 +1,26 @@
-from . import _ffi as ffi
+from wasmtime import _ffi as ffi
 from ctypes import pointer, byref, c_uint64, cast, c_void_p, CFUNCTYPE
-from wasmtime import Engine, WasmtimeError
-from . import _value as value
+from ._engine import Engine
+from ._error import WasmtimeError
 import typing
 
-if typing.TYPE_CHECKING:
-    from ._wasi import WasiConfig
+from ._wasi import WasiConfig, to_char_array as pw
+
+from bases import Final, Object, __main__
+makeapi = __main__.makeapi
+del __main__
+class value(Final):
+    from ._value import _intern, _unintern, _externref_finalizer
+    __init__ = None			# namespace only
 
 
-class Store:
+class Store(Object):
     _ptr: "pointer[ffi.wasmtime_store_t]"
     _context: "pointer[ffi.wasmtime_context_t]"
 
+    __slots__ = ('__locked__', '__proxydict__')
     def __init__(self, engine: Engine = None, data: typing.Optional[typing.Any] = None):
-
+        super().__init__()
         if engine is None:
             engine = Engine()
         elif not isinstance(engine, Engine):
@@ -26,6 +33,7 @@ class Store:
         self._ptr = ffi.wasmtime_store_new(engine._ptr, data_id, finalize)
         self._context = ffi.wasmtime_store_context(self._ptr)
         self.engine = engine
+        self.lockdown(makeapi)
 
     def data(self) -> typing.Optional[typing.Any]:
         """
@@ -108,21 +116,21 @@ class Store:
             raise WasmtimeError._from_ptr(err)
         return remaining.value
 
-    def set_wasi(self, wasi: "WasiConfig") -> None:
+    def set_wasi(self, wasi: WasiConfig) -> None:
         """
         TODO
         """
-        error = ffi.wasmtime_context_set_wasi(self._context, wasi._ptr)
-        delattr(wasi, '_ptr')
+        error = ffi.wasmtime_context_set_wasi(self._context, wasi._moveout(pw))
         if error:
             raise WasmtimeError._from_ptr(error)
 
     def __del__(self) -> None:
         if hasattr(self, '_ptr'):
             ffi.wasmtime_store_delete(self._ptr)
+Store.lockclass()
 
 
-class InterruptHandle:
+class InterruptHandle(Object):
     """
     A handle which can be used to interrupt executing WebAssembly code, forcing
     it to trap.
@@ -131,13 +139,16 @@ class InterruptHandle:
     https://bytecodealliance.github.io/wasmtime/api/wasmtime/struct.Store.html#method.interrupt_handle
     """
 
+    __slots__ = ('__locked__', '__proxydict__')
     def __init__(self, store: Store):
+        super().__init_()
         if not isinstance(store, Store):
             raise TypeError("expected a Store")
         ptr = ffi.wasmtime_interrupt_handle_new(store._context)
         if not ptr:
             raise WasmtimeError("interrupts not enabled on Store")
         self._ptr = ptr
+        self.lockdown(makeapi)
 
     def interrupt(self) -> None:
         """
@@ -149,6 +160,7 @@ class InterruptHandle:
     def __del__(self) -> None:
         if hasattr(self, '_ptr'):
             ffi.wasmtime_interrupt_handle_delete(self._ptr)
+InterruptHandle.lockclass()
 
 
 if typing.TYPE_CHECKING:

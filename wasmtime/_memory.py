@@ -1,10 +1,12 @@
-from . import _ffi as ffi
+from wasmtime import _ffi as ffi
 from ctypes import *
-from wasmtime import MemoryType, WasmtimeError
+from ._types import MemoryType
+from ._error import WasmtimeError
 from ._store import Storelike
 
+from bases import Final
 
-class Memory:
+class Memory(Final):
     _memory: ffi.wasmtime_memory_t
 
     def __init__(self, store: Storelike, ty: MemoryType):

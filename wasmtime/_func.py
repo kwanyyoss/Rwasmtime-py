@@ -1,21 +1,28 @@
 from contextlib import contextmanager
 from ctypes import POINTER, pointer, byref, CFUNCTYPE, c_void_p, cast
-from wasmtime import Store, FuncType, Val, IntoVal, Trap, WasmtimeError
-from . import _ffi as ffi
+from ._store import Store, Storelike
+from ._types import FuncType
+from ._value import Val, IntoVal, _externref_finalizer
+from ._trap import Trap
+from ._error import WasmtimeError
+from wasmtime import _ffi as ffi
 from ._extern import wrap_extern
 from typing import Callable, Optional, Generic, TypeVar, List, Union, Tuple, cast as cast_type, Sequence
 from ._exportable import AsExtern
-from ._store import Storelike
 
+from bases import Final, Object, __main__
+makeapi = __main__.makeapi
+del __main__
 
 T = TypeVar('T')
 FUNCTIONS: "Slab[Tuple]"
 LAST_EXCEPTION: Optional[Exception] = None
 
 
-class Func:
+class Func(Object):
     _func: ffi.wasmtime_func_t
 
+    __slots__ = ('__locked__', '__proxydict__')
     def __init__(self, store: Storelike, ty: FuncType, func: Callable, access_caller: bool = False):
         """
         Creates a new func in `store` with the given `ty` which calls the closure
@@ -27,6 +34,7 @@ class Func:
         type `Caller` below.
         """
 
+        super().__init__()
         if not isinstance(store, Store):
             raise TypeError("expected a Store")
         if not isinstance(ty, FuncType):
@@ -41,12 +49,14 @@ class Func:
             finalize,
             byref(_func))
         self._func = _func
+        self.lockdown(makeapi)
 
     @classmethod
     def _from_raw(cls, func: ffi.wasmtime_func_t) -> "Func":
         ty: "Func" = cls.__new__(cls)
+        super(cls, ty).__init__()
         ty._func = func
-        return ty
+        return ty.lockdown(makeapi)
 
     def type(self, store: Storelike) -> FuncType:
         """
@@ -112,9 +122,10 @@ class Func:
     def _as_extern(self) -> ffi.wasmtime_extern_t:
         union = ffi.wasmtime_extern_union(func=self._func)
         return ffi.wasmtime_extern_t(ffi.WASMTIME_EXTERN_FUNC, union)
+Func.lockclass()
 
 
-class Caller:
+class Caller(Final):
     _context: "pointer[ffi.wasmtime_context_t]"
 
     def __init__(self, ptr: pointer):
@@ -192,7 +203,7 @@ def trampoline(idx, caller, params, nparams, results, nresults):  # type: ignore
                 val = pyresults._clone()
             else:
                 val = Val._convert(result_tys[0], pyresults)
-            results[0] = val._into_raw()
+            results[0] = val._into_raw(_externref_finalizer)
         else:
             if len(pyresults) != nresults:
                 raise WasmtimeError("callback produced wrong number of results")
@@ -203,7 +214,7 @@ def trampoline(idx, caller, params, nparams, results, nresults):  # type: ignore
                     val = result._clone()
                 else:
                     val = Val._convert(result_tys[i], result)
-                results[i] = val._into_raw()
+                results[i] = val._into_raw(_externref_finalizer)
         return 0
     except Exception as e:
         global LAST_EXCEPTION

@@ -1,11 +1,14 @@
-from . import _ffi as ffi
+from wasmtime import _ffi as ffi
 from ctypes import *
-from wasmtime import TableType, Store, WasmtimeError, IntoVal, Val
+from ._error import WasmtimeError
+from ._types import TableType
+from ._value import IntoVal, Val
 from typing import Optional, Any
-from ._store import Storelike
+from ._store import Store, Storelike
 
+from bases import Final
 
-class Table:
+class Table(Final):
     _table: ffi.wasmtime_table_t
 
     def __init__(self, store: Store, ty: TableType, init: IntoVal):
